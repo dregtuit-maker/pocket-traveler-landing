@@ -3,24 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 // useRef kept for mountTime (bot timing check)
 import { useAnalytics } from "@/hooks/useAnalytics";
+import type { copy } from "@/i18n/copy";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type FormState = "idle" | "loading" | "success" | "duplicate" | "error" | "rate_limited";
+type WaitlistStrings = (typeof copy)["en"]["waitlist"];
 
-const USE_CASES = [
-  { value: "",           label: "Wat is je reisdoel? (optioneel)" },
-  { value: "city-trip",  label: "Stedentrip" },
-  { value: "weekend",    label: "Weekendje weg" },
-  { value: "solo",       label: "Solo reizen" },
-  { value: "couple",     label: "Romantisch uitje" },
-  { value: "friends",    label: "Met vrienden" },
-  { value: "work-trip",  label: "Zakenreis" },
-] as const;
+type FormState = "idle" | "loading" | "success" | "duplicate" | "error" | "rate_limited";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function WaitlistForm() {
+export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
   const { track } = useAnalytics();
 
   const [state,             setState]            = useState<FormState>("idle");
@@ -105,17 +98,17 @@ export default function WaitlistForm() {
 
       switch (data.error) {
         case "consent_required":
-          setErrorMsg("Je moet akkoord gaan met het privacybeleid.");
+          setErrorMsg(c.errorConsent);
           break;
         case "invalid_email":
-          setErrorMsg("Vul een geldig e-mailadres in.");
+          setErrorMsg(c.errorGeneric);
           break;
         default:
-          setErrorMsg("Er ging iets mis. Probeer het opnieuw.");
+          setErrorMsg(c.errorGeneric);
       }
       setState("error");
     } catch {
-      setErrorMsg("Geen verbinding. Controleer je internet en probeer het opnieuw.");
+      setErrorMsg(c.errorGeneric);
       setState("error");
     }
   }
@@ -134,10 +127,10 @@ export default function WaitlistForm() {
           </svg>
         </div>
         <h3 style={{ color: "var(--color-brand-navy)" }} className="text-xl font-bold mb-2">
-          Je staat op de lijst!
+          {c.success}
         </h3>
         <p style={{ color: "var(--color-brand-muted)" }} className="text-sm">
-          We laten je weten zodra Pocket Traveler beschikbaar is.
+          We&apos;ll let you know as soon as Pocket Traveler is available.
         </p>
       </div>
     );
@@ -156,10 +149,10 @@ export default function WaitlistForm() {
           </svg>
         </div>
         <h3 style={{ color: "var(--color-brand-navy)" }} className="text-xl font-bold mb-2">
-          Al aangemeld!
+          You&apos;re already on the list!
         </h3>
         <p style={{ color: "var(--color-brand-muted)" }} className="text-sm">
-          Dit e-mailadres staat al op de wachtlijst. We houden je op de hoogte.
+          This email is already on the waitlist. We&apos;ll keep you posted.
         </p>
       </div>
     );
@@ -170,7 +163,7 @@ export default function WaitlistForm() {
   const disabled = state === "loading";
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-4" aria-label="Wachtlijst aanmelding">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4" aria-label="Waitlist form">
       {/* ── Honeypot (invisible to humans, bots will fill it) ── */}
       <div className="hp-trap" aria-hidden="true">
         <label htmlFor="hp_name">Naam</label>
@@ -192,14 +185,14 @@ export default function WaitlistForm() {
           className="block text-sm font-medium mb-1.5"
           style={{ color: "var(--color-brand-navy)" }}
         >
-          E-mailadres <span style={{ color: "var(--color-brand-coral)" }}>*</span>
+          {c.emailLabel} <span style={{ color: "var(--color-brand-coral)" }}>*</span>
         </label>
         <input
           id="wl-email"
           type="email"
           required
           autoComplete="email"
-          placeholder="jij@email.nl"
+          placeholder={c.emailPlaceholder}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="input-field"
@@ -214,14 +207,14 @@ export default function WaitlistForm() {
           className="block text-sm font-medium mb-1.5"
           style={{ color: "var(--color-brand-navy)" }}
         >
-          Stad / bestemming{" "}
-          <span className="text-xs" style={{ color: "var(--color-brand-muted)" }}>(optioneel)</span>
+          {c.cityLabel}{" "}
+          <span className="text-xs" style={{ color: "var(--color-brand-muted)" }}>(optional)</span>
         </label>
         <input
           id="wl-city"
           type="text"
           autoComplete="off"
-          placeholder="Amsterdam, Parijs, Rome…"
+          placeholder={c.cityPlaceholder}
           value={city}
           onChange={(e) => setCity(e.target.value)}
           className="input-field"
@@ -236,7 +229,7 @@ export default function WaitlistForm() {
           className="block text-sm font-medium mb-1.5"
           style={{ color: "var(--color-brand-navy)" }}
         >
-          Reisdoel
+          {c.useCaseLabel}
         </label>
         <select
           id="wl-usecase"
@@ -246,8 +239,8 @@ export default function WaitlistForm() {
           style={{ cursor: "pointer" }}
           disabled={disabled}
         >
-          {USE_CASES.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+          {c.useCases.map((o) => (
+            <option key={o.v} value={o.v}>{o.t}</option>
           ))}
         </select>
       </div>
@@ -269,17 +262,7 @@ export default function WaitlistForm() {
           className="text-sm leading-snug cursor-pointer"
           style={{ color: "var(--color-brand-muted)" }}
         >
-          Ik ga akkoord met het{" "}
-          <a
-            href="/privacy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium underline"
-            style={{ color: "var(--color-brand-coral)" }}
-          >
-            privacybeleid
-          </a>{" "}
-          en geef toestemming voor het opslaan van mijn gegevens.{" "}
+          {c.consentPrivacy}{" "}
           <span style={{ color: "var(--color-brand-coral)" }}>*</span>
         </label>
       </div>
@@ -300,8 +283,7 @@ export default function WaitlistForm() {
           className="text-sm leading-snug cursor-pointer"
           style={{ color: "var(--color-brand-muted)" }}
         >
-          Ja, ik ontvang graag updates en aanbiedingen van Pocket Traveler.{" "}
-          <span className="text-xs">(optioneel)</span>
+          {c.consentMarketing}
         </label>
       </div>
 
@@ -321,7 +303,7 @@ export default function WaitlistForm() {
           style={{ color: "#dc2626", background: "#fef2f2" }}
           role="alert"
         >
-          Te veel aanmeldingen. Probeer het over een moment opnieuw.
+          Too many requests. Please try again in a moment.
         </p>
       )}
 
@@ -338,7 +320,7 @@ export default function WaitlistForm() {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Aanmelden…
+            Loading…
           </>
         ) : (
           <>
@@ -346,24 +328,14 @@ export default function WaitlistForm() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
-            Zet me op de wachtlijst
+            {c.submit}
           </>
         )}
       </button>
 
-      {/* AVG notice */}
+      {/* Privacy notice */}
       <p className="text-xs text-center leading-relaxed pt-1" style={{ color: "var(--color-brand-muted)" }}>
-        We gebruiken je e-mailadres uitsluitend voor de lancering van Pocket Traveler.
-        Geen spam, geen tracking cookies.{" "}
-        <a
-          href="/privacy"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline"
-          style={{ color: "inherit" }}
-        >
-          Privacybeleid
-        </a>
+        {c.fineprint}
       </p>
     </form>
   );
