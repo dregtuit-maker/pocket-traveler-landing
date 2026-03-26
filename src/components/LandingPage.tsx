@@ -7,56 +7,6 @@ import { useLocale } from "@/i18n/useLocale";
 import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/locale";
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://pockettraveler.app";
-
-const jsonLd = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "WebSite",
-      "@id": `${SITE}/#website`,
-      url: SITE,
-      name: "Pocket Traveler",
-      description: "AI-powered personalised city walking tours",
-      potentialAction: {
-        "@type": "SearchAction",
-        target: { "@type": "EntryPoint", urlTemplate: `${SITE}/?q={search_term_string}` },
-        "query-input": "required name=search_term_string",
-      },
-    },
-    {
-      "@type": "Organization",
-      "@id": `${SITE}/#organization`,
-      name: "Pocket Traveler",
-      url: SITE,
-      logo: {
-        "@type": "ImageObject",
-        url: `${SITE}/branding/6CD30BDD-8658-40EF-AF08-9B06B5CDD1E0.png`,
-      },
-      contactPoint: {
-        "@type": "ContactPoint",
-        email: "hallo@pockettraveler.app",
-        contactType: "customer service",
-      },
-    },
-    {
-      "@type": "SoftwareApplication",
-      "@id": `${SITE}/#app`,
-      name: "Pocket Traveler",
-      applicationCategory: "TravelApplication",
-      operatingSystem: "iOS, Android",
-      description:
-        "AI-powered GPS walking tour generator. Get a personalised city route in seconds based on your interests, available time and travel style.",
-      offers: {
-        "@type": "Offer",
-        price: "0",
-        priceCurrency: "EUR",
-        description: "Free tier with limited tours. Premium subscription available.",
-      },
-      publisher: { "@id": `${SITE}/#organization` },
-    },
-  ],
-};
 
 // ─── Feature icons (order matches copy.features.cards) ────────────────────────
 
@@ -88,16 +38,12 @@ const FEATURE_ICONS = [
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export default function LandingPage({ initialLocale }: { initialLocale: Locale }) {
-  const [locale, setLocale] = useLocale("en");
+  const [locale, setLocale] = useLocale(initialLocale);
   const c = copy[locale];
   const locales: Locale[] = ["en", "nl"];
 
   return (
     <div style={{ background: "var(--color-brand-bg)", minHeight: "100vh" }}>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
 
       {/* ── Sticky nav ───────────────────────────────────────────────────────── */}
       <nav
