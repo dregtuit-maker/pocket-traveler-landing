@@ -3,13 +3,22 @@ import type { Metadata } from "next";
 import { getLocale } from "@/i18n/locale";
 import { copy } from "@/i18n/copy";
 
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://pockettraveler.app";
+
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
+  const title = copy[locale].privacy.title;
   return {
-    title: copy[locale].privacy.title,
-    description: locale === "nl"
-      ? "Hoe Pocket Traveler omgaat met jouw persoonsgegevens conform de AVG."
-      : "How Pocket Traveler handles your personal data in accordance with GDPR.",
+    title,
+    description:
+      locale === "nl"
+        ? "Hoe Pocket Traveler omgaat met jouw persoonsgegevens conform de AVG/GDPR."
+        : "How Pocket Traveler handles your personal data in compliance with GDPR.",
+    alternates: {
+      canonical: `${SITE}/privacy`,
+      languages: { en: `${SITE}/privacy`, nl: `${SITE}/privacy?lang=nl`, "x-default": `${SITE}/privacy` },
+    },
+    robots: { index: false, follow: false },
   };
 }
 

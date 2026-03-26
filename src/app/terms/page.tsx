@@ -3,13 +3,22 @@ import type { Metadata } from "next";
 import { getLocale } from "@/i18n/locale";
 import { copy } from "@/i18n/copy";
 
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://pockettraveler.app";
+
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
+  const title = copy[locale].terms.title;
   return {
-    title: copy[locale].terms.title,
-    description: locale === "nl"
-      ? "De algemene gebruiksvoorwaarden van Pocket Traveler."
-      : "The terms of service for Pocket Traveler.",
+    title,
+    description:
+      locale === "nl"
+        ? "De algemene gebruiksvoorwaarden van Pocket Traveler."
+        : "Terms of service for Pocket Traveler.",
+    alternates: {
+      canonical: `${SITE}/terms`,
+      languages: { en: `${SITE}/terms`, nl: `${SITE}/terms?lang=nl`, "x-default": `${SITE}/terms` },
+    },
+    robots: { index: false, follow: false },
   };
 }
 
