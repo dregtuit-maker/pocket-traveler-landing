@@ -188,7 +188,7 @@ export default function LandingPage({ initialLocale }: { initialLocale: Locale }
                   </div>
                   <div style={{ position: "relative", aspectRatio: "1", overflow: "hidden" }}>
                     <Image
-                      src="/branding/amsterdam-route-map.png"
+                      src="/branding/amsterdam-route-map-v2.png"
                       alt="Pocket Traveler – personalise your tour"
                       fill
                       style={{ objectFit: "cover", objectPosition: "top" }}
