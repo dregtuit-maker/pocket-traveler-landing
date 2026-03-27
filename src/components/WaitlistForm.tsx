@@ -1,33 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-// useRef kept for mountTime (bot timing check)
 import { useAnalytics } from "@/hooks/useAnalytics";
 import type { copy } from "@/i18n/copy";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type WaitlistStrings = (typeof copy)["en"]["waitlist"];
-
 type FormState = "idle" | "loading" | "success" | "duplicate" | "error" | "rate_limited";
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const MAX_USE_CASES = 3;
 
 export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
   const { track } = useAnalytics();
 
-  const [state,             setState]            = useState<FormState>("idle");
-  const [errorMsg,          setErrorMsg]         = useState("");
-  const [email,             setEmail]            = useState("");
-  const [city,              setCity]             = useState("");
-  const [useCase,           setUseCase]          = useState("");
-  const [consentPrivacy,    setConsentPrivacy]   = useState(false);
-  const [consentMarketing,  setConsentMarketing] = useState(false);
-  const [honeypot,          setHoneypot]         = useState("");   // must stay ""
+  const [state, setState] = useState<FormState>("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [email, setEmail] = useState("");
+  const [city, setCity] = useState("");
+  const [useCases, setUseCases] = useState<string[]>([]);
+  const [consentPrivacy, setConsentPrivacy] = useState(false);
+  const [consentMarketing, setConsentMarketing] = useState(false);
+  const [honeypot, setHoneypot] = useState(""); // must stay ""
+  const [cooldownUntil, setCooldownUntil] = useState<number>(0);
 
   // Time-to-submit: record when the component mounts
   const mountTime = useRef<number>(Date.now());
-
   useEffect(() => {
     mountTime.current = Date.now();
   }, []);
@@ -37,21 +33,52 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
     return new URLSearchParams(window.location.search).get(key);
   }
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  function startCooldown(ms: number) {
+    const until = Date.now() + ms;
+    setCooldownUntil(until);
+    window.setTimeout(() => {
+      setCooldownUntil((prev) => {
+        if (prev !== until) return prev;
+        setState("idle");
+        return 0;
+      });
+    }, ms);
+  }
+
+  function toggleUseCase(v: string) {
+    setUseCases((prev) => {
+      const has = prev.includes(v);
+      if (has) return prev.filter((x) => x !== v);
+      if (prev.length >= MAX_USE_CASES) return prev; // hard cap
+      return [...prev, v];
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!consentPrivacy || state === "loading") return;
 
-    // Client-side bot checks (honeypot + timing)
-    if (honeypot) return;
-    if (Date.now() - mountTime.current < 2000) {
+    if (!consentPrivacy) return;
+    if (state === "loading") return;
+
+    // cooldown guard
+    if (cooldownUntil && Date.now() < cooldownUntil) {
       setState("rate_limited");
+      return;
+    }
+
+    // bot checks
+    if (honeypot) return;
+    if (Date.now() - mountTime.current < 1500) {
+      setState("rate_limited");
+      setErrorMsg("");
+      startCooldown(3000);
       return;
     }
 
     setState("loading");
     setErrorMsg("");
+
+    const use_case = useCases.length ? useCases.join(",") : "";
 
     try {
       const res = await fetch("/api/waitlist", {
@@ -60,7 +87,7 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
         body: JSON.stringify({
           email,
           city,
-          use_case: useCase,
+          use_case,
           referral: "landing",
           source: "landing_page",
           utm_source: getParam("utm_source"),
@@ -71,24 +98,41 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
         }),
       });
 
-      const data: { ok: boolean; error?: string; details?: string } =
-        await res.json();
+      const raw = await res.text();
+      let data: any = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = {};
+      }
 
-      if (data.ok) {
+      // Your API: ok:true with inserted true/false
+      if (data?.ok === true) {
+        const inserted = data?.result?.inserted;
+        const reason = data?.result?.reason;
+
+        if (inserted === false && reason === "duplicate_email") {
+          setState("duplicate");
+          track("waitlist_submit_duplicate");
+          return;
+        }
+
         setState("success");
         track("waitlist_submit_success");
         return;
       }
 
-      if (res.status === 429 || data.error === "rate_limited") {
+      if (res.status === 429 || data?.error === "rate_limited") {
         setState("rate_limited");
+        setErrorMsg("");
+        startCooldown(5000);
         return;
       }
 
-      // Supabase duplicate-key errors surface as supabase_error with details
       const isDuplicate =
-        data.error === "supabase_error" &&
-        (data.details ?? "").toLowerCase().includes("duplicate");
+        data?.error === "supabase_error" &&
+        (String(data?.details ?? "").toLowerCase().includes("duplicate") ||
+          String(data?.details ?? "").toLowerCase().includes("unique"));
 
       if (isDuplicate) {
         setState("duplicate");
@@ -96,7 +140,7 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
         return;
       }
 
-      switch (data.error) {
+      switch (data?.error) {
         case "consent_required":
           setErrorMsg(c.errorConsent);
           break;
@@ -112,8 +156,6 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
       setState("error");
     }
   }
-
-  // ── Success state ──────────────────────────────────────────────────────────
 
   if (state === "success") {
     return (
@@ -158,13 +200,10 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
     );
   }
 
-  // ── Form ──────────────────────────────────────────────────────────────────
-
   const disabled = state === "loading";
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4" aria-label="Waitlist form">
-      {/* ── Honeypot (invisible to humans, bots will fill it) ── */}
       <div className="hp-trap" aria-hidden="true">
         <label htmlFor="hp_name">Naam</label>
         <input
@@ -178,7 +217,6 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
         />
       </div>
 
-      {/* Email */}
       <div>
         <label
           htmlFor="wl-email"
@@ -200,7 +238,6 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
         />
       </div>
 
-      {/* City */}
       <div>
         <label
           htmlFor="wl-city"
@@ -222,30 +259,57 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
         />
       </div>
 
-      {/* Use case */}
       <div>
-        <label
-          htmlFor="wl-usecase"
-          className="block text-sm font-medium mb-1.5"
-          style={{ color: "var(--color-brand-navy)" }}
-        >
-          {c.useCaseLabel}
-        </label>
-        <select
-          id="wl-usecase"
-          value={useCase}
-          onChange={(e) => setUseCase(e.target.value)}
-          className="input-field"
-          style={{ cursor: "pointer" }}
-          disabled={disabled}
-        >
-          {c.useCases.map((o) => (
-            <option key={o.v} value={o.v}>{o.t}</option>
-          ))}
-        </select>
+        <div className="flex items-end justify-between gap-3">
+          <label
+            className="block text-sm font-medium mb-1.5"
+            style={{ color: "var(--color-brand-navy)" }}
+          >
+            {c.useCaseLabel}
+          </label>
+          <span className="text-xs" style={{ color: "var(--color-brand-muted)" }}>
+            {useCases.length}/{MAX_USE_CASES}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {c.useCases
+            .filter((o) => o.v) // drop empty placeholder option if present
+            .map((o) => {
+              const checked = useCases.includes(o.v);
+              const disabledOption = !checked && useCases.length >= MAX_USE_CASES;
+              return (
+                <label
+                  key={o.v}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2"
+                  style={{
+                    border: "1px solid var(--color-brand-border)",
+                    background: checked ? "rgba(224,120,80,.08)" : "#fff",
+                    opacity: disabledOption ? 0.6 : 1,
+                    cursor: disabled || disabledOption ? "not-allowed" : "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleUseCase(o.v)}
+                    disabled={disabled || disabledOption}
+                    style={{ accentColor: "var(--color-brand-coral)" }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm" style={{ color: "var(--color-brand-navy)" }}>
+                    {o.t}
+                  </span>
+                </label>
+              );
+            })}
+        </div>
+
+        <p className="text-xs mt-2" style={{ color: "var(--color-brand-muted)" }}>
+          Select up to {MAX_USE_CASES}.
+        </p>
       </div>
 
-      {/* Privacy consent – required */}
       <div className="flex gap-3 items-start pt-1">
         <input
           id="wl-consent-privacy"
@@ -262,12 +326,10 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
           className="text-sm leading-snug cursor-pointer"
           style={{ color: "var(--color-brand-muted)" }}
         >
-          {c.consentPrivacy}{" "}
-          <span style={{ color: "var(--color-brand-coral)" }}>*</span>
+          {c.consentPrivacy} <span style={{ color: "var(--color-brand-coral)" }}>*</span>
         </label>
       </div>
 
-      {/* Marketing consent – optional */}
       <div className="flex gap-3 items-start">
         <input
           id="wl-consent-marketing"
@@ -287,27 +349,18 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
         </label>
       </div>
 
-      {/* Error messages */}
       {state === "error" && errorMsg && (
-        <p
-          className="text-sm rounded-xl px-4 py-3"
-          style={{ color: "#dc2626", background: "#fef2f2" }}
-          role="alert"
-        >
+        <p className="text-sm rounded-xl px-4 py-3" style={{ color: "#dc2626", background: "#fef2f2" }} role="alert">
           {errorMsg}
         </p>
       )}
+
       {state === "rate_limited" && (
-        <p
-          className="text-sm rounded-xl px-4 py-3"
-          style={{ color: "#dc2626", background: "#fef2f2" }}
-          role="alert"
-        >
-          Too many requests. Please try again in a moment.
+        <p className="text-sm rounded-xl px-4 py-3" style={{ color: "#dc2626", background: "#fef2f2" }} role="alert">
+          Too many requests. Try again in 5s.
         </p>
       )}
 
-      {/* Submit */}
       <button
         type="submit"
         disabled={disabled || !consentPrivacy}
@@ -333,7 +386,6 @@ export default function WaitlistForm({ c }: { c: WaitlistStrings }) {
         )}
       </button>
 
-      {/* Privacy notice */}
       <p className="text-xs text-center leading-relaxed pt-1" style={{ color: "var(--color-brand-muted)" }}>
         {c.fineprint}
       </p>

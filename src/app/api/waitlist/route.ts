@@ -11,10 +11,24 @@ function sha256Hex(input: string) {
 }
 
 function getIp(req: Request) {
-  const xf = req.headers.get("x-forwarded-for");
+  const h = req.headers;
+
+  // Vercel sometimes provides this explicitly
+  const xv = h.get("x-vercel-forwarded-for");
+  if (xv) return xv.split(",")[0].trim();
+
+  // Standard proxy header
+  const xf = h.get("x-forwarded-for");
   if (xf) return xf.split(",")[0].trim();
-  const realIp = req.headers.get("x-real-ip");
+
+  // Cloudflare
+  const cf = h.get("cf-connecting-ip");
+  if (cf) return cf.trim();
+
+  // Common fallback
+  const realIp = h.get("x-real-ip");
   if (realIp) return realIp.trim();
+
   return "0.0.0.0";
 }
 
